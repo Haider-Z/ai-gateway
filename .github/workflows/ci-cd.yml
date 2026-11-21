@@ -9,7 +9,6 @@ on:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -39,18 +38,12 @@ jobs:
         run: docker build -t ai-gateway:ci .
 
       - name: Validate production Compose config
-        env:
-          POSTGRES_USER: gateway
-          POSTGRES_PASSWORD: ci-password
-          POSTGRES_DB: telemetry
-          DOMAIN_NAME: http://localhost
-        run: docker compose -f docker-compose.prod.yml config -q
+        run: docker compose --env-file .env.example -f docker-compose.prod.yml config -q
 
   deploy:
     needs: test-and-build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
-
     steps:
       - name: Deploy to AWS EC2 over SSH
         uses: appleboy/ssh-action@v1
@@ -63,4 +56,16 @@ jobs:
             cd ~/ai-gateway
             git pull origin main
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
-            docker image prune -f
+            for i in $(seq 1 12); do
+              if docker compose -f docker-compose.prod.yml exec -T app curl -fsS http://127.0.0.1:8000/health; then
+                echo ""
+                echo "Health check passed!"
+                docker image prune -f
+                exit 0
+              fi
+              echo "Waiting for app to become healthy ($i/12)..."
+              sleep 5
+            done
+            echo "Health check failed!"
+            docker compose -f docker-compose.prod.yml logs --tail=50 app
+            exit 1
