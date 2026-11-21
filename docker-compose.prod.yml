@@ -23,7 +23,8 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://${POSTGRES_USER:-gateway}:${POSTGRES_PASSWORD:-gateway_password}@postgres:5432/${POSTGRES_DB:-telemetry}
