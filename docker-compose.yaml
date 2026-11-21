@@ -1,0 +1,14 @@
+services:
+  redis:
+    image: redis:8
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway_password
+      POSTGRES_DB: telemetry
+    ports:
+      - "5433:5432"

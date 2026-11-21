@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Gateway &amp; RAG Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { background-color: #09090b; color: #f4f4f5; }
+    .panel { background-color: #111114; border-color: #27272a; }
+    .card { background-color: #16161a; border-color: #27272a; }
+    .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #27272a; border-radius: 9999px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+    @keyframes flowDash {
+      to { stroke-dashoffset: -24; }
+    }
+    .edge-active {
+      stroke-dasharray: 6 6;
+      animation: flowDash 0.9s linear infinite;
+    }
+    .node-group { cursor: pointer; transition: opacity 0.2s ease; }
+    .node-group:hover rect.node-box,
+    .node-group:hover polygon.node-box {
+      filter: brightness(1.15);
+    }
+  </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden font-sans antialiased selection:bg-emerald-500/20 selection:text-emerald-200">
+
+  <!-- Top Header -->
+  <header class="h-13 border-b border-zinc-800/90 bg-[#0d0d10] px-5 py-2.5 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-7 h-7 rounded-md bg-zinc-900 border border-zinc-700/80 flex items-center justify-center text-emerald-400">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <div class="flex items-baseline gap-2.5">
+        <span class="font-semibold text-sm tracking-tight text-zinc-100">Cost-Aware AI Gateway</span>
+        <span class="text-xs text-zinc-500 hidden sm:inline">Semantic Cache • Hybrid Router • PDF RAG</span>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2.5 text-xs font-mono">
+      <span id="kbBadge" class="px-2.5 py-1 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
+        kb:v1 • 0 docs
+      </span>
+      <span class="px-2.5 py-1 rounded bg-emerald-950/50 text-emerald-400 border border-emerald-800/60 flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        redis + pg
+      </span>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+
+    <!-- LEFT PANE (5 cols): Chat & Knowledge Base Admin -->
+    <section class="lg:col-span-5 flex flex-col border-r border-zinc-800/90 bg-[#0c0c0f] overflow-hidden">
+
+      <!-- Navigation Tabs -->
+      <div class="flex items-center justify-between border-b border-zinc-800/90 px-4 bg-[#0f0f13] shrink-0">
+        <div class="flex gap-1">
+          <button id="tabChatBtn" onclick="switchTab('chat')"
+            class="px-3.5 py-2.5 text-xs font-medium border-b-2 border-zinc-100 text-zinc-100 flex items-center gap-1.5 transition">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            Query Console
+          </button>
+          <button id="tabOwnerBtn" onclick="switchTab('owner')"
+            class="px-3.5 py-2.5 text-xs font-medium border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 flex items-center gap-1.5 transition">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            </svg>
+            Knowledge Base &amp; Cache
+          </button>
+        </div>
+        <button onclick="clearChat()" class="text-[11px] text-zinc-500 hover:text-zinc-300 transition">Clear</button>
+      </div>
+
+      <!-- TAB 1: QUERY CONSOLE -->
+      <div id="chatView" class="flex-1 flex flex-col overflow-hidden">
+        <div id="chatMessages" class="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-3.5">
+          <div class="card border rounded-lg p-3.5 text-xs text-zinc-300 leading-relaxed">
+            <div class="font-medium text-zinc-100 mb-1">Gateway Ready</div>
+            Ask any question against your indexed PDFs and warmed FAQ cache. Every response updates the <span class="text-zinc-100 font-medium">Live Execution Graph</span> on the right.
+          </div>
+        </div>
+
+        <!-- Quick Test Presets -->
+        <div class="px-4 py-2.5 border-t border-zinc-800/80 bg-[#0f0f13] shrink-0">
+          <div class="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold mb-1.5">Test Presets</div>
+          <div class="flex flex-wrap gap-1.5">
+            <button onclick="fillPrompt('What kind of role is he looking for?')"
+              class="text-[11px] px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition">
+              Cache Hit (FAQ)
+            </button>
+            <button onclick="fillPrompt('Who is Zaman and what is his CGPA?')"
+              class="text-[11px] px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition">
+              Fast RAG Lookup
+            </button>
+            <button onclick="fillPrompt('Compare his technical architecture across DineAssist AI and Climate Sentinel, and calculate the key metric improvements.')"
+              class="text-[11px] px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition">
+              Complex Reasoning
+            </button>
+            <button onclick="fillPrompt('Contact me at alex@example.com or 555-867-5309 regarding his internship experience.')"
+              class="text-[11px] px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition">
+              PII Scrubbing
+            </button>
+          </div>
+        </div>
+
+        <!-- Input Form -->
+        <form id="chatForm" onsubmit="sendChat(event)" class="p-3.5 bg-[#111114] border-t border-zinc-800/90 shrink-0 space-y-2.5">
+          <div class="flex items-center gap-4 text-[11px] text-zinc-400">
+            <label class="flex items-center gap-1.5 cursor-pointer select-none hover:text-zinc-200">
+              <input id="simFailToggle" type="checkbox" class="rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-0" />
+              <span>Simulate <code class="text-amber-400 font-mono">503</code> Outage</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer select-none hover:text-zinc-200">
+              <input id="bypassCacheToggle" type="checkbox" class="rounded bg-zinc-900 border-zinc-700 text-zinc-300 focus:ring-0" />
+              <span>Bypass Cache</span>
+            </label>
+          </div>
+
+          <div class="flex gap-2">
+            <input id="chatInput" type="text" required
+              placeholder="Send a prompt through the gateway..."
+              class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600" />
+            <button id="sendBtn" type="submit"
+              class="px-4 py-2 rounded-lg bg-zinc-100 hover:bg-white disabled:opacity-40 text-xs font-semibold text-zinc-950 transition">
+              Send
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- TAB 2: KNOWLEDGE BASE & CACHE ADMIN -->
+      <div id="ownerView" class="hidden flex-1 overflow-y-auto scrollbar-thin p-4 space-y-4">
+        <!-- Admin Authentication Key -->
+        <div class="panel border rounded-lg p-3 flex items-center gap-2">
+          <label for="adminKeyInput" class="text-[11px] font-mono text-zinc-400 shrink-0">X-Admin-Key:</label>
+          <input id="adminKeyInput" type="password" placeholder="Enter ADMIN_API_KEY to manage KB..."
+            oninput="sessionStorage.setItem('gw_admin_key', this.value)"
+            class="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-zinc-600" />
+        </div>
+
+        <!-- PDF Upload & Document Manager -->
+        <div class="panel border rounded-lg p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-zinc-100 text-xs uppercase tracking-wider">1. Indexed PDF Documents (Redis 8)</h2>
+            <span class="text-[11px] font-mono text-zinc-500">O(1) versioned invalidation</span>
+          </div>
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            Upload or remove PDFs. Any change increments <code class="font-mono text-zinc-300">kb_version</code> so stale cached answers are invalidated immediately.
+          </p>
+
+          <div class="flex items-center gap-2">
+            <input id="pdfFileInput" type="file" accept=".pdf"
+              class="block w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-zinc-700 file:text-xs file:font-medium file:bg-zinc-900 file:text-zinc-200 hover:file:bg-zinc-800 cursor-pointer" />
+            <button onclick="uploadPdf()" id="uploadBtn"
+              class="px-3.5 py-1.5 rounded bg-zinc-100 hover:bg-white text-xs font-semibold text-zinc-950 shrink-0 transition">
+              Upload
+            </button>
+          </div>
+          <div id="uploadStatus" class="text-xs text-zinc-400"></div>
+
+          <!-- Active Document List with Delete Button -->
+          <div class="pt-2.5 border-t border-zinc-800/80 space-y-1.5">
+            <div class="text-[11px] font-medium text-zinc-400">Active Documents in Vector Index</div>
+            <div id="docList" class="space-y-1.5 text-xs text-zinc-400">Loading...</div>
+          </div>
+        </div>
+
+        <!-- FAQ Cache Warmer -->
+        <div class="panel border rounded-lg p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-zinc-100 text-xs uppercase tracking-wider">2. Semantic Cache FAQ Warmer</h2>
+            <button onclick="warmDefaultFaqs()" id="warmBtn"
+              class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition">
+              Warm Cache
+            </button>
+          </div>
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            Pre-loads static FAQs plus 3 auto-generated paraphrases per question into Redis for sub-millisecond exact hits and $0 LLM semantic hits.
+          </p>
+          <textarea id="faqJsonInput" rows="9"
+            class="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-300 focus:outline-none focus:border-zinc-600">[
+  {
+    "question": "Who is Zaman Haider?",
+    "answer": "Zaman Haider is a Computer Science graduate and AI engineer based in Lahore, Pakistan, specializing in LLM applications, RAG pipelines, and Python backends."
+  },
+  {
+    "question": "What kind of role is he looking for?",
+    "answer": "Zaman is targeting AI/ML Engineering, LLM Application Development, and Python Backend roles where he can build impactful production systems."
+  },
+  {
+    "question": "What is his CGPA?",
+    "answer": "Zaman earned a BS in Computer Science from COMSATS University Islamabad with a CGPA of 3.50 / 4.00."
+  }
+]</textarea>
+          <div id="warmStatus" class="text-xs text-zinc-400"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT PANE (7 cols): Interactive Architecture Graph + Live X-Ray + Postgres Telemetry -->
+    <section class="lg:col-span-7 flex flex-col bg-[#09090b] overflow-y-auto scrollbar-thin p-4 space-y-4">
+
+      <!-- Cumulative PostgreSQL Telemetry Strip -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div class="panel border rounded-lg p-3">
+          <div class="text-[11px] text-zinc-400">Cost Saved vs Frontier</div>
+          <div id="kpiSavedPct" class="text-lg font-bold font-mono text-emerald-400 mt-0.5">0.0%</div>
+          <div id="kpiSavedUsd" class="text-[10px] text-zinc-500 font-mono mt-0.5">$0.000000 saved</div>
+        </div>
+
+        <div class="panel border rounded-lg p-3">
+          <div class="text-[11px] text-zinc-400">Cache Hit Rate</div>
+          <div id="kpiHitRate" class="text-lg font-bold font-mono text-sky-400 mt-0.5">0.0%</div>
+          <div id="kpiRequests" class="text-[10px] text-zinc-500 font-mono mt-0.5">0 requests</div>
+        </div>
+
+        <div class="panel border rounded-lg p-3">
+          <div class="text-[11px] text-zinc-400">Avg Latency</div>
+          <div id="kpiLatency" class="text-lg font-bold font-mono text-zinc-100 mt-0.5">0 ms</div>
+          <div id="kpiLatencySub" class="text-[10px] text-zinc-500 mt-0.5">End-to-end gateway</div>
+        </div>
+
+        <div class="panel border rounded-lg p-3">
+          <div class="text-[11px] text-zinc-400">Guardrails &amp; Failovers</div>
+          <div id="kpiSafety" class="text-lg font-bold font-mono text-amber-400 mt-0.5">0 / 0</div>
+          <div class="text-[10px] text-zinc-500 mt-0.5">PII scrubs / 503 retries</div>
+        </div>
+      </div>
+
+      <!-- INTERACTIVE LIVE ARCHITECTURE DECISION GRAPH -->
+      <div class="panel border rounded-lg p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-200">Live Query Execution Graph</h2>
+            <span id="graphModeBadge" class="text-[11px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
+              Preview Mode
+            </span>
+          </div>
+
+          <!-- Interactive Path Simulator Pills -->
+          <div class="flex flex-wrap items-center gap-1 text-[10px] font-mono">
+            <button onclick="previewGraphMode('all')" id="btnModeAll" class="px-2 py-0.5 rounded bg-zinc-800 text-zinc-200 border border-zinc-700">All</button>
+            <button onclick="previewGraphMode('hit')" id="btnModeHit" class="px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800">Cache HIT</button>
+            <button onclick="previewGraphMode('fast')" id="btnModeFast" class="px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800">MISS→Easy</button>
+            <button onclick="previewGraphMode('strong')" id="btnModeStrong" class="px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800">MISS→Complex</button>
+            <button onclick="previewGraphMode('failover')" id="btnModeFailover" class="px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800">503 Failover</button>
+          </div>
+        </div>
+
+        <!-- SVG Top-Down Technical Decision Tree -->
+        <div class="bg-[#09090b] border border-zinc-800/90 rounded-lg p-2 overflow-x-auto">
+          <svg id="archSvg" viewBox="0 0 760 470" class="w-full h-auto min-w-[600px] select-none">
+            <defs>
+              <marker id="arrowMuted" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#3f3f46"/>
+              </marker>
+              <marker id="arrowEmerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#10b981"/>
+              </marker>
+              <marker id="arrowSky" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8"/>
+              </marker>
+              <marker id="arrowViolet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#a78bfa"/>
+              </marker>
+              <marker id="arrowAmber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#f59e0b"/>
+              </marker>
+            </defs>
+
+            <!-- EDGES -->
+            <path id="edge-user-pii" d="M 380 44 L 380 68" fill="none" stroke="#3f3f46" stroke-width="1.8" marker-end="url(#arrowMuted)" />
+            <path id="edge-pii-cache" d="M 380 106 L 380 132" fill="none" stroke="#3f3f46" stroke-width="1.8" marker-end="url(#arrowMuted)" />
+
+            <path id="edge-cache-hit" d="M 305 156 L 145 156 L 145 192" fill="none" stroke="#3f3f46" stroke-width="1.8" marker-end="url(#arrowMuted)" />
+            <rect x="195" y="145" width="38" height="18" rx="4" fill="#09090b" stroke="#27272a" />
+            <text id="lbl-hit" x="214" y="157" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="10" font-weight="600">HIT</text>
+
+            <path id="edge-hit-telemetry" d="M 145 242 L 145 426 L 285 426" fill="none" stroke="#3f3f46" stroke-width="1.8" marker-end="url(#arrowMuted)" />
+            <text x="95" y="330" text-anchor="middle" fill="#52525b" font-family="JetBrains Mono" font-size="9">0 LLM calls</text>
+
+            <path id="edge-cache-rag" d="M 455 156 L 545 156 L 545 192" fill="none" stroke="#3f3f46" stroke-width="1.8" marker-end="url(#arrowMuted)" />
+            <rect x="480" y="145" width="42" height="18" rx="4" fill="#09090b" stroke="#27272a" />
+            <text id="lbl-miss" x="501" y="157" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="10" font-weight="600">MISS</text>
+
+            <path id="edge-rag-router" d="M 545 242 L 545 266" fill="none" stroke="#3f3f46" stroke-width="1.8" marker-end="url(#arrowMuted)" />
+
+            <path id="edge-router-easy" d="M 475 288 L 385 288 L 385 316" fill="none" stroke="#3f3f46" stroke-width="1.8" marker-end="url(#arrowMuted)" />
+            <rect x="405" y="278" width="42" height="16" rx="3" fill="#09090b" stroke="#27272a" />
+            <text id="lbl-easy" x="426" y="289" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="9" font-weight="600">EASY</text>
+
+            <path id="edge-router-complex" d="M 615 288 L 665 288 L 665 316" fill="none" stroke="#3f3f46" stroke-width="1.8" marker-end="url(#arrowMuted)" />
+            <rect x="616" y="278" width="54" height="16" rx="3" fill="#09090b" stroke="#27272a" />
+            <text id="lbl-complex" x="643" y="289" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="9" font-weight="600">COMPLEX</text>
+
+            <path id="edge-easy-exec" d="M 385 362 L 385 376 L 470 376" fill="none" stroke="#3f3f46" stroke-width="1.8" />
+            <path id="edge-complex-exec" d="M 665 362 L 665 376 L 580 376" fill="none" stroke="#3f3f46" stroke-width="1.8" />
+            <path id="edge-exec-telemetry" d="M 525 398 L 525 426 L 475 426" fill="none" stroke="#3f3f46" stroke-width="1.8" marker-end="url(#arrowMuted)" />
+
+            <!-- NODES -->
+            <g id="node-user" class="node-group" onclick="selectGraphNode('user')">
+              <rect class="node-box" x="300" y="8" width="160" height="36" rx="6" fill="#18181b" stroke="#3f3f46" stroke-width="1.5" />
+              <text x="380" y="24" text-anchor="middle" fill="#f4f4f5" font-family="Inter" font-size="11" font-weight="600">User Query</text>
+              <text x="380" y="37" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="9">POST /api/shop/chat</text>
+            </g>
+
+            <g id="node-pii" class="node-group" onclick="selectGraphNode('pii')">
+              <rect class="node-box" x="290" y="68" width="180" height="38" rx="6" fill="#18181b" stroke="#3f3f46" stroke-width="1.5" />
+              <text x="380" y="85" text-anchor="middle" fill="#f4f4f5" font-family="Inter" font-size="11" font-weight="600">1. PII Ingress Guardrail</text>
+              <text id="node-pii-sub" x="380" y="98" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="9">Regex Scrub (&lt;1ms)</text>
+            </g>
+
+            <g id="node-cache" class="node-group" onclick="selectGraphNode('cache')">
+              <rect class="node-box" x="305" y="132" width="150" height="48" rx="8" fill="#18181b" stroke="#3f3f46" stroke-width="1.5" />
+              <text x="380" y="153" text-anchor="middle" fill="#f4f4f5" font-family="Inter" font-size="11" font-weight="600">2. Redis 8 Cache</text>
+              <text id="node-cache-sub" x="380" y="168" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="9">SHA-256 + Cosine &lt;= 0.38</text>
+            </g>
+
+            <g id="node-hit" class="node-group" onclick="selectGraphNode('hit')">
+              <rect class="node-box" x="55" y="192" width="180" height="50" rx="6" fill="#18181b" stroke="#3f3f46" stroke-width="1.5" />
+              <text x="145" y="213" text-anchor="middle" fill="#f4f4f5" font-family="Inter" font-size="11" font-weight="600">Redis Cache Hit</text>
+              <text id="node-hit-sub" x="145" y="228" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="9">Tier 1/2 • $0 LLM Spend</text>
+            </g>
+
+            <g id="node-rag" class="node-group" onclick="selectGraphNode('rag')">
+              <rect class="node-box" x="455" y="192" width="180" height="50" rx="6" fill="#18181b" stroke="#3f3f46" stroke-width="1.5" />
+              <text x="545" y="213" text-anchor="middle" fill="#f4f4f5" font-family="Inter" font-size="11" font-weight="600">3. Redis 8 PDF RAG</text>
+              <text id="node-rag-sub" x="545" y="228" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="9">Top-4 Chunks + Citations</text>
+            </g>
+
+            <g id="node-router" class="node-group" onclick="selectGraphNode('router')">
+              <rect class="node-box" x="475" y="266" width="140" height="44" rx="8" fill="#18181b" stroke="#3f3f46" stroke-width="1.5" />
+              <text x="545" y="285" text-anchor="middle" fill="#f4f4f5" font-family="Inter" font-size="11" font-weight="600">4. Query Router</text>
+              <text id="node-router-sub" x="545" y="299" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="9">Heuristic + Centroid</text>
+            </g>
+
+            <g id="node-easy" class="node-group" onclick="selectGraphNode('easy')">
+              <rect class="node-box" x="305" y="316" width="160" height="46" rx="6" fill="#18181b" stroke="#3f3f46" stroke-width="1.5" />
+              <text x="385" y="336" text-anchor="middle" fill="#f4f4f5" font-family="Inter" font-size="11" font-weight="600">Gemini Flash Lite</text>
+              <text x="385" y="350" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="9">Fast Tier • $0.075/1M</text>
+            </g>
+
+            <g id="node-complex" class="node-group" onclick="selectGraphNode('complex')">
+              <rect class="node-box" x="585" y="316" width="160" height="46" rx="6" fill="#18181b" stroke="#3f3f46" stroke-width="1.5" />
+              <text x="665" y="336" text-anchor="middle" fill="#f4f4f5" font-family="Inter" font-size="11" font-weight="600">GPT-6.2-Sol</text>
+              <text x="665" y="350" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="9">Strong Tier • $2.00/1M</text>
+            </g>
+
+            <g id="node-exec" class="node-group" onclick="selectGraphNode('exec')">
+              <rect class="node-box" x="435" y="366" width="180" height="32" rx="5" fill="#18181b" stroke="#3f3f46" stroke-width="1.5" />
+              <text id="node-exec-sub" x="525" y="386" text-anchor="middle" fill="#d4d4d8" font-family="JetBrains Mono" font-size="9.5" font-weight="500">503 Auto-Failover + Write-Back</text>
+            </g>
+
+            <g id="node-telemetry" class="node-group" onclick="selectGraphNode('telemetry')">
+              <rect class="node-box" x="285" y="408" width="190" height="44" rx="6" fill="#18181b" stroke="#3f3f46" stroke-width="1.5" />
+              <text x="380" y="427" text-anchor="middle" fill="#f4f4f5" font-family="Inter" font-size="11" font-weight="600">6. Async Postgres Telemetry</text>
+              <text id="node-telemetry-sub" x="380" y="441" text-anchor="middle" fill="#71717a" font-family="JetBrains Mono" font-size="9">BackgroundTasks (0ms block)</text>
+            </g>
+          </svg>
+        </div>
+
+        <!-- Clicked Node Technical Inspector -->
+        <div id="nodeInspector" class="bg-zinc-950 border border-zinc-800/90 rounded-lg p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div class="flex items-center gap-2">
+              <span id="inspTitle" class="font-semibold text-zinc-100">Click any node in the graph to inspect</span>
+              <span id="inspFile" class="font-mono text-[10px] text-zinc-500">app/main.py</span>
+            </div>
+            <p id="inspDesc" class="text-zinc-400 text-[11px] mt-0.5">
+              Send a message on the left to trace its exact live path, or click a node above to inspect its implementation.
+            </p>
+          </div>
+          <span id="inspMetric" class="font-mono text-[11px] px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 shrink-0">
+            Idle
+          </span>
+        </div>
+      </div>
+
+      <!-- Retrieved RAG Citations & Recent Postgres Logs Split -->
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-4">
+        <!-- Retrieved PDF Chunks -->
+        <div class="xl:col-span-5 panel border rounded-lg p-3.5 space-y-2">
+          <div class="flex items-center justify-between">
+            <h3 class="text-[11px] uppercase tracking-wider font-semibold text-zinc-300">Retrieved PDF Context</h3>
+            <span id="ragChunkCountBadge" class="text-[10px] font-mono text-zinc-500">0 chunks</span>
+          </div>
+          <div id="xrayChunksList" class="space-y-1.5 text-[11px] text-zinc-400 max-h-48 overflow-y-auto scrollbar-thin">
+            <div class="text-zinc-500 py-4 text-center">No RAG retrieval triggered yet.</div>
+          </div>
+        </div>
+
+        <!-- Recent Postgres Request Logs -->
+        <div class="xl:col-span-7 panel border rounded-lg p-3.5 space-y-2">
+          <div class="flex items-center justify-between">
+            <h3 class="text-[11px] uppercase tracking-wider font-semibold text-zinc-300">PostgreSQL Request Logs</h3>
+            <button onclick="refreshTelemetry()" class="text-[11px] text-zinc-400 hover:text-zinc-200 font-mono">↻ Sync</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-[11px]">
+              <thead class="text-zinc-500 border-b border-zinc-800">
+                <tr>
+                  <th class="pb-1.5 font-medium">Cache</th>
+                  <th class="pb-1.5 font-medium">Model</th>
+                  <th class="pb-1.5 font-medium">Flags</th>
+                  <th class="pb-1.5 font-medium text-right">Latency</th>
+                  <th class="pb-1.5 font-medium text-right">Saved</th>
+                </tr>
+              </thead>
+              <tbody id="recentLogsBody" class="divide-y divide-zinc-800/60 font-mono text-zinc-300">
+                <tr><td colspan="5" class="py-4 text-center text-zinc-500">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <script>
+    let currentXray = null;
+
+    const NODE_SPECS = {
+      user: {
+        title: "User Query Ingress",
+        file: "app/shop/routes.py",
+        desc: "Receives user prompt, versioned tenant ID (kb_workspace_vN), and optional X-Simulate-Failure / Cache-Control flags.",
+        metric: "POST /api/shop/chat"
+      },
+      pii: {
+        title: "1. PII Ingress Guardrail",
+        file: "app/core/guardrails.py",
+        desc: "Compiled regex scrubs EMAIL, PHONE, CARD, and API_KEY into [REDACTED_*] tokens before touching Redis or external LLM APIs.",
+        metric: "< 1.0 ms • $0"
+      },
+      cache: {
+        title: "2. Two-Tier Semantic Cache (Redis 8)",
+        file: "app/core/cache.py",
+        desc: "Checks Tier 1 normalized SHA-256 exact hash first, then Tier 2 RedisVL cosine similarity (threshold <= 0.38) over warmed FAQ paraphrases & past Q&As.",
+        metric: "Tier 1 + Tier 2"
+      },
+      hit: {
+        title: "Redis Cache Hit (Fast Exit)",
+        file: "app/core/cache.py",
+        desc: "Short-circuits RAG retrieval and LLM inference completely. Returns cached answer immediately at $0 LLM token cost.",
+        metric: "~1.5ms Exact / ~300ms Vector"
+      },
+      rag: {
+        title: "3. Redis 8 PDF RAG Retriever",
+        file: "app/shop/rag.py",
+        desc: "Embeds sanitized query with text-embedding-3-small and fetches top-4 overlapping PDF chunks with filename and page citations.",
+        metric: "Index: scoop_byte_rag"
+      },
+      router: {
+        title: "4. Hybrid Complexity Router",
+        file: "app/core/router.py",
+        desc: "Evaluates keyword/length heuristics (0ms) first, then compares query embedding distance against Simple vs. Complex anchor centroids (margin >= 0.04).",
+        metric: "0–250 ms"
+      },
+      easy: {
+        title: "Fast Tier: Gemini 3.5 Flash Lite",
+        file: "app/core/providers.py",
+        desc: "Selected for straightforward lookups and single-fact queries, cutting token costs by >95% compared to frontier reasoning models.",
+        metric: "$0.075 / 1M in"
+      },
+      complex: {
+        title: "Strong Tier: GPT-6.2-Sol",
+        file: "app/core/providers.py",
+        desc: "Selected for multi-constraint reasoning, step-by-step math, comparisons, or low-confidence ambiguous queries.",
+        metric: "$2.00 / 1M in"
+      },
+      exec: {
+        title: "5. Upstream Execution & 503 Failover",
+        file: "app/main.py",
+        desc: "Automatically fails over mid-request to cross-provider backup (gpt-6-luna / gemini-3.5-flash-lite) on HTTP 429, 500–504, or timeout, then caches the answer.",
+        metric: "Auto-Retry + TTL 3600s"
+      },
+      telemetry: {
+        title: "6. Async PostgreSQL Telemetry",
+        file: "app/core/telemetry.py",
+        desc: "FastAPI BackgroundTasks logs latency, tokens, cache hit status, failover flag, and dollar savings vs. frontier baseline with 0ms blocking overhead.",
+        metric: "0ms Blocking"
+      }
+    };
+
+    function getAdminHeaders(extra = {}) {
+      const key =
+        document.getElementById("adminKeyInput")?.value ||
+        sessionStorage.getItem("gw_admin_key") ||
+        "";
+      return { ...extra, "X-Admin-Key": key };
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function formatSimpleMarkdown(text) {
+      let html = escapeHtml(text);
+      html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="text-zinc-100 font-semibold">$1</strong>');
+      html = html.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-zinc-900 border border-zinc-800 font-mono text-[11px] text-zinc-200">$1</code>');
+      html = html.replace(/\n/g, "<br/>");
+      return html;
+    }
+
+    function switchTab(tab) {
+      const isChat = tab === "chat";
+      document.getElementById("chatView").classList.toggle("hidden", !isChat);
+      document.getElementById("ownerView").classList.toggle("hidden", isChat);
+
+      document.getElementById("tabChatBtn").className = isChat
+        ? "px-3.5 py-2.5 text-xs font-medium border-b-2 border-zinc-100 text-zinc-100 flex items-center gap-1.5 transition"
+        : "px-3.5 py-2.5 text-xs font-medium border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 flex items-center gap-1.5 transition";
+
+      document.getElementById("tabOwnerBtn").className = !isChat
+        ? "px-3.5 py-2.5 text-xs font-medium border-b-2 border-zinc-100 text-zinc-100 flex items-center gap-1.5 transition"
+        : "px-3.5 py-2.5 text-xs font-medium border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 flex items-center gap-1.5 transition";
+
+      if (!isChat) loadDocuments();
+    }
+
+    function clearChat() {
+      document.getElementById("chatMessages").innerHTML = `
+        <div class="card border rounded-lg p-3.5 text-xs text-zinc-300 leading-relaxed">
+          <div class="font-medium text-zinc-100 mb-1">Console Cleared</div>
+          Send a prompt or select a preset below to inspect the live gateway execution path.
+        </div>`;
+    }
+
+    function fillPrompt(text) {
+      switchTab("chat");
+      const input = document.getElementById("chatInput");
+      input.value = text;
+      input.focus();
+    }
+
+    function selectGraphNode(nodeId) {
+      const spec = NODE_SPECS[nodeId];
+      if (!spec) return;
+      document.getElementById("inspTitle").textContent = spec.title;
+      document.getElementById("inspFile").textContent = spec.file;
+
+      if (currentXray) {
+        if (nodeId === "pii") {
+          const pii = currentXray.pii_redacted || [];
+          document.getElementById("inspDesc").textContent = pii.length
+            ? `Scrubbed ${pii.join(", ")} at ingress before Redis lookup or LLM inference.`
+            : "No PII detected in this prompt; passed cleanly to Redis cache.";
+          document.getElementById("inspMetric").textContent = pii.length ? `REDACTED: ${pii.join(",")}` : "CLEAN";
+          return;
+        }
+        if (nodeId === "cache" || nodeId === "hit") {
+          document.getElementById("inspDesc").textContent = currentXray.cache_status.includes("HIT")
+            ? `Matched in Redis (${currentXray.cache_status}, cosine distance: ${currentXray.cache_distance ?? 0}). Skipped RAG and LLM calls.`
+            : "Cache MISS — forwarded clean query to Redis 8 PDF RAG retriever.";
+          document.getElementById("inspMetric").textContent = currentXray.cache_status;
+          return;
+        }
+        if (nodeId === "rag") {
+          document.getElementById("inspDesc").textContent = currentXray.rag_used
+            ? `Retrieved ${currentXray.rag_chunks.length} PDF chunks in ${currentXray.rag_ms || 0} ms to ground the LLM response.`
+            : "Skipped because the query was served directly from Redis cache.";
+          document.getElementById("inspMetric").textContent = currentXray.rag_used ? `${currentXray.rag_chunks.length} chunks` : "SKIPPED";
+          return;
+        }
+        if (nodeId === "router" || nodeId === "easy" || nodeId === "complex") {
+          document.getElementById("inspDesc").textContent = currentXray.rag_used
+            ? `Routed to ${currentXray.routed_tier.toUpperCase()} (${currentXray.provider}/${currentXray.model}) via ${currentXray.router_reason}.`
+            : "Skipped because the query was served directly from Redis cache.";
+          document.getElementById("inspMetric").textContent = currentXray.rag_used ? currentXray.model : "SKIPPED";
+          return;
+        }
+        if (nodeId === "exec") {
+          document.getElementById("inspDesc").textContent = currentXray.failover_used
+            ? `Primary provider failed; automatically failed over to ${currentXray.provider}/${currentXray.model} and cached response.`
+            : `Served directly by ${currentXray.provider}/${currentXray.model} with zero upstream retries.`;
+          document.getElementById("inspMetric").textContent = currentXray.failover_used ? "FAILOVER USED" : "PRIMARY OK";
+          return;
+        }
+      }
+
+      document.getElementById("inspDesc").textContent = spec.desc;
+      document.getElementById("inspMetric").textContent = spec.metric;
+    }
+
+    function applyGraphHighlight({ activeNodes, activeEdges, color = "#10b981", marker = "url(#arrowEmerald)", dimInactive = true }) {
+      const allNodes = ["user", "pii", "cache", "hit", "rag", "router", "easy", "complex", "exec", "telemetry"];
+      const allEdges = [
+        "edge-user-pii", "edge-pii-cache", "edge-cache-hit", "edge-hit-telemetry",
+        "edge-cache-rag", "edge-rag-router", "edge-router-easy", "edge-router-complex",
+        "edge-easy-exec", "edge-complex-exec", "edge-exec-telemetry"
+      ];
+
+      allNodes.forEach(id => {
+        const grp = document.getElementById(`node-${id}`);
+        const box = grp.querySelector(".node-box");
+        const isActive = activeNodes.includes(id);
+        grp.style.opacity = isActive || !dimInactive ? "1" : "0.28";
+        box.setAttribute("stroke", isActive ? color : "#3f3f46");
+        box.setAttribute("stroke-width", isActive ? "2" : "1.5");
+        box.setAttribute("fill", isActive ? "#1c1c22" : "#18181b");
+      });
+
+      allEdges.forEach(id => {
+        const edge = document.getElementById(id);
+        const isActive = activeEdges.includes(id);
+        edge.style.opacity = isActive || !dimInactive ? "1" : "0.22";
+        edge.setAttribute("stroke", isActive ? color : "#3f3f46");
+        edge.setAttribute("stroke-width", isActive ? "2.2" : "1.6");
+        if (isActive) {
+          edge.classList.add("edge-active");
+          if (edge.hasAttribute("marker-end")) edge.setAttribute("marker-end", marker);
+        } else {
+          edge.classList.remove("edge-active");
+          if (edge.hasAttribute("marker-end")) edge.setAttribute("marker-end", "url(#arrowMuted)");
+        }
+      });
+
+      document.getElementById("lbl-hit").setAttribute("fill", activeEdges.includes("edge-cache-hit") ? "#10b981" : "#71717a");
+      document.getElementById("lbl-miss").setAttribute("fill", activeEdges.includes("edge-cache-rag") ? "#38bdf8" : "#71717a");
+      document.getElementById("lbl-easy").setAttribute("fill", activeEdges.includes("edge-router-easy") ? "#38bdf8" : "#71717a");
+      document.getElementById("lbl-complex").setAttribute("fill", activeEdges.includes("edge-router-complex") ? "#a78bfa" : "#71717a");
+    }
+
+    function previewGraphMode(mode) {
+      currentXray = null;
+      const modeMap = {
+        all: {
+          label: "All Paths",
+          nodes: ["user", "pii", "cache", "hit", "rag", "router", "easy", "complex", "exec", "telemetry"],
+          edges: [],
+          color: "#3f3f46",
+          marker: "url(#arrowMuted)",
+          dim: false
+        },
+        hit: {
+          label: "Preview: Cache HIT",
+          nodes: ["user", "pii", "cache", "hit", "telemetry"],
+          edges: ["edge-user-pii", "edge-pii-cache", "edge-cache-hit", "edge-hit-telemetry"],
+          color: "#10b981",
+          marker: "url(#arrowEmerald)",
+          dim: true
+        },
+        fast: {
+          label: "Preview: MISS → Easy",
+          nodes: ["user", "pii", "cache", "rag", "router", "easy", "exec", "telemetry"],
+          edges: ["edge-user-pii", "edge-pii-cache", "edge-cache-rag", "edge-rag-router", "edge-router-easy", "edge-easy-exec", "edge-exec-telemetry"],
+          color: "#38bdf8",
+          marker: "url(#arrowSky)",
+          dim: true
+        },
+        strong: {
+          label: "Preview: MISS → Complex",
+          nodes: ["user", "pii", "cache", "rag", "router", "complex", "exec", "telemetry"],
+          edges: ["edge-user-pii", "edge-pii-cache", "edge-cache-rag", "edge-rag-router", "edge-router-complex", "edge-complex-exec", "edge-exec-telemetry"],
+          color: "#a78bfa",
+          marker: "url(#arrowViolet)",
+          dim: true
+        },
+        failover: {
+          label: "Preview: 503 Failover",
+          nodes: ["user", "pii", "cache", "rag", "router", "easy", "exec", "telemetry"],
+          edges: ["edge-user-pii", "edge-pii-cache", "edge-cache-rag", "edge-rag-router", "edge-router-easy", "edge-easy-exec", "edge-exec-telemetry"],
+          color: "#f59e0b",
+          marker: "url(#arrowAmber)",
+          dim: true
+        }
+      };
+
+      const cfg = modeMap[mode];
+      document.getElementById("graphModeBadge").textContent = cfg.label;
+      applyGraphHighlight({
+        activeNodes: cfg.nodes,
+        activeEdges: cfg.edges,
+        color: cfg.color,
+        marker: cfg.marker,
+        dimInactive: cfg.dim
+      });
+    }
+
+    function renderXray(xray) {
+      currentXray = xray;
+      const isHit = xray.cache_status.includes("HIT");
+      const isStrong = xray.routed_tier === "strong";
+      const isFailover = xray.failover_used;
+
+      document.getElementById("node-pii-sub").textContent =
+        xray.pii_redacted && xray.pii_redacted.length ? `Scrubbed: ${xray.pii_redacted.join(",")}` : "Clean (<1ms)";
+      document.getElementById("node-cache-sub").textContent =
+        isHit ? `${xray.cache_status} (d=${xray.cache_distance ?? 0})` : "MISS -> Vector RAG";
+      document.getElementById("node-rag-sub").textContent =
+        xray.rag_used ? `${xray.rag_chunks.length} chunks (${xray.rag_ms || 0}ms)` : "Skipped (Cache Hit)";
+      document.getElementById("node-exec-sub").textContent =
+        isFailover ? `FAILOVER -> ${xray.model}` : `OK -> ${xray.model}`;
+      document.getElementById("node-telemetry-sub").textContent =
+        `Logged • Total ${xray.latency_ms}ms`;
+
+      if (isHit) {
+        document.getElementById("graphModeBadge").textContent = `LIVE: ${xray.cache_status} (${xray.latency_ms}ms)`;
+        applyGraphHighlight({
+          activeNodes: ["user", "pii", "cache", "hit", "telemetry"],
+          activeEdges: ["edge-user-pii", "edge-pii-cache", "edge-cache-hit", "edge-hit-telemetry"],
+          color: "#10b981",
+          marker: "url(#arrowEmerald)",
+          dimInactive: true
+        });
+        selectGraphNode("hit");
+      } else {
+        const tierNode = isStrong ? "complex" : "easy";
+        const tierEdge = isStrong ? "edge-router-complex" : "edge-router-easy";
+        const execEdge = isStrong ? "edge-complex-exec" : "edge-easy-exec";
+        const color = isFailover ? "#f59e0b" : (isStrong ? "#a78bfa" : "#38bdf8");
+        const marker = isFailover ? "url(#arrowAmber)" : (isStrong ? "url(#arrowViolet)" : "url(#arrowSky)");
+
+        document.getElementById("graphModeBadge").textContent =
+          `LIVE: ${xray.routed_tier.toUpperCase()} • ${xray.model} (${xray.latency_ms}ms)`;
+        applyGraphHighlight({
+          activeNodes: ["user", "pii", "cache", "rag", "router", tierNode, "exec", "telemetry"],
+          activeEdges: ["edge-user-pii", "edge-pii-cache", "edge-cache-rag", "edge-rag-router", tierEdge, execEdge, "edge-exec-telemetry"],
+          color,
+          marker,
+          dimInactive: true
+        });
+        selectGraphNode(isFailover ? "exec" : tierNode);
+      }
+
+      const chunksList = document.getElementById("xrayChunksList");
+      const chunkBadge = document.getElementById("ragChunkCountBadge");
+      chunksList.innerHTML = "";
+      if (xray.rag_used && xray.rag_chunks && xray.rag_chunks.length) {
+        chunkBadge.textContent = `${xray.rag_chunks.length} chunks • ${xray.rag_ms || 0}ms`;
+        xray.rag_chunks.forEach(c => {
+          const div = document.createElement("div");
+          div.className = "p-2 rounded bg-zinc-950 border border-zinc-800/90 space-y-0.5";
+          div.innerHTML = `
+            <div class="flex justify-between font-mono text-[10px] text-sky-400">
+              <span class="truncate pr-2">${escapeHtml(c.source)} • p.${c.page}</span>
+              <span class="shrink-0 text-zinc-500">d=${c.distance}</span>
+            </div>
+            <div class="text-zinc-400 text-[11px] leading-snug">${escapeHtml(c.preview)}</div>
+          `;
+          chunksList.appendChild(div);
+        });
+      } else if (xray.rag_used) {
+        chunkBadge.textContent = "0 chunks";
+        chunksList.innerHTML = `<div class="text-amber-400 py-3 text-center">No PDFs indexed yet. Upload one in Knowledge Base.</div>`;
+      } else {
+        chunkBadge.textContent = "Skipped (Cache Hit)";
+        chunksList.innerHTML = `<div class="text-emerald-400/90 py-3 text-center">Served directly from Redis cache — RAG bypassed.</div>`;
+      }
+    }
+
+    async function sendChat(event) {
+      event.preventDefault();
+      const input = document.getElementById("chatInput");
+      const sendBtn = document.getElementById("sendBtn");
+      const message = input.value.trim();
+      if (!message) return;
+
+      const simulateFailure = document.getElementById("simFailToggle").checked;
+      const bypassCache = document.getElementById("bypassCacheToggle").checked;
+      const container = document.getElementById("chatMessages");
+
+      const userDiv = document.createElement("div");
+      userDiv.className = "flex justify-end";
+      userDiv.innerHTML = `<div class="bg-zinc-100 text-zinc-950 font-medium rounded-lg px-3.5 py-2 max-w-[85%] text-xs leading-relaxed">${escapeHtml(message)}</div>`;
+      container.appendChild(userDiv);
+
+      const botDiv = document.createElement("div");
+      botDiv.className = "flex justify-start";
+      botDiv.innerHTML = `<div class="card border rounded-lg px-3.5 py-2.5 max-w-[92%] text-xs text-zinc-400 animate-pulse font-mono">Routing via AI Gateway...</div>`;
+      container.appendChild(botDiv);
+      container.scrollTop = container.scrollHeight;
+
+      input.value = "";
+      sendBtn.disabled = true;
+
+      try {
+        const res = await fetch("/api/shop/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message,
+            simulate_failure: simulateFailure,
+            bypass_cache: bypassCache,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+        const x = data.xray;
+        const isHit = x.cache_status.includes("HIT");
+        const statusColor = isHit ? "text-emerald-400" : (x.failover_used ? "text-amber-400" : "text-sky-400");
+        const badgeText = isHit
+          ? `${x.cache_status} • ${x.latency_ms}ms`
+          : `${x.model} • ${x.latency_ms}ms${x.failover_used ? " • FAILOVER" : ""}`;
+
+        const bubble = document.createElement("div");
+        bubble.className = "card hover:border-zinc-600 border rounded-lg p-3.5 max-w-[92%] text-xs text-zinc-200 leading-relaxed cursor-pointer transition";
+        bubble.title = "Click to load this request into the Live Execution Graph";
+        bubble.onclick = () => renderXray(x);
+        bubble.innerHTML = `
+          <div>${formatSimpleMarkdown(data.answer)}</div>
+          <div class="mt-2.5 pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[10px] font-mono">
+            <span class="${statusColor}">${escapeHtml(badgeText)}</span>
+            <span class="text-zinc-500 hover:text-zinc-300">Trace in Graph →</span>
+          </div>
+        `;
+        botDiv.innerHTML = "";
+        botDiv.appendChild(bubble);
+
+        renderXray(x);
+        await refreshTelemetry();
+      } catch (err) {
+        botDiv.innerHTML = `<div class="bg-rose-950/60 border border-rose-800/80 text-rose-200 rounded-lg p-3 text-xs font-mono">Error: ${escapeHtml(err.message)} (Check if server is running)</div>`;
+      } finally {
+        sendBtn.disabled = false;
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+
+    async function uploadPdf() {
+      const fileInput = document.getElementById("pdfFileInput");
+      const statusEl = document.getElementById("uploadStatus");
+      const btn = document.getElementById("uploadBtn");
+      if (!fileInput.files.length) {
+        statusEl.textContent = "Select a .pdf file first.";
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+
+      btn.disabled = true;
+      statusEl.textContent = "Chunking pages & indexing vectors in Redis 8...";
+      try {
+        const res = await fetch("/api/shop/upload", {
+          method: "POST",
+          headers: getAdminHeaders(),
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Upload failed");
+
+        fileInput.value = "";
+        statusEl.innerHTML = `<span class="text-emerald-400 font-mono">Indexed ${escapeHtml(data.filename)} (${data.pages}p, ${data.chunks_indexed} chunks) • kb:v${data.cache_version}</span>`;
+        await loadDocuments();
+      } catch (err) {
+        statusEl.innerHTML = `<span class="text-rose-400 font-mono">${escapeHtml(err.message)}</span>`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function deleteDocument(filename) {
+      const statusEl = document.getElementById("uploadStatus");
+      statusEl.textContent = `Removing ${filename} from Redis 8...`;
+      try {
+        const res = await fetch(`/api/shop/documents/${encodeURIComponent(filename)}`, {
+          method: "DELETE",
+          headers: getAdminHeaders(),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Delete failed");
+
+        statusEl.innerHTML = `<span class="text-amber-400 font-mono">Removed ${escapeHtml(filename)} (${data.deleted_chunks} chunks) • kb:v${data.cache_version}</span>`;
+        await loadDocuments();
+      } catch (err) {
+        statusEl.innerHTML = `<span class="text-rose-400 font-mono">${escapeHtml(err.message)}</span>`;
+      }
+    }
+
+    async function warmDefaultFaqs() {
+      const statusEl = document.getElementById("warmStatus");
+      const btn = document.getElementById("warmBtn");
+      btn.disabled = true;
+      statusEl.textContent = "Generating paraphrases & warming Redis cache...";
+
+      try {
+        const faqs = JSON.parse(document.getElementById("faqJsonInput").value);
+        const res = await fetch("/api/shop/faqs/warm", {
+          method: "POST",
+          headers: getAdminHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ faqs }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to warm FAQs");
+
+        statusEl.innerHTML = `<span class="text-emerald-400 font-mono">Warmed ${data.faq_count} phrased entries into ${escapeHtml(data.cache_tenant)}</span>`;
+        await loadDocuments();
+      } catch (err) {
+        statusEl.innerHTML = `<span class="text-rose-400 font-mono">${escapeHtml(err.message)}</span>`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function loadDocuments() {
+      try {
+        const res = await fetch("/api/shop/documents");
+        const data = await res.json();
+        document.getElementById("kbBadge").textContent =
+          `kb:v${data.cache_version} • ${data.documents.length} doc(s) • ${data.warmed_faq_count} FAQs`;
+
+        const listEl = document.getElementById("docList");
+        if (!data.documents.length) {
+          listEl.innerHTML = `<div class="text-zinc-500 py-2">No PDFs indexed. Upload a document above.</div>`;
+        } else {
+          listEl.innerHTML = data.documents.map(d => `
+            <div class="flex items-center justify-between bg-zinc-950 px-3 py-2 rounded border border-zinc-800/90">
+              <div class="min-w-0 pr-2">
+                <div class="text-zinc-200 font-mono text-xs truncate">${escapeHtml(d.filename)}</div>
+                <div class="text-[10px] font-mono text-zinc-500">${d.pages} page(s) • ${d.chunks} vector chunks</div>
+              </div>
+              <button onclick="deleteDocument('${escapeHtml(d.filename).replace(/'/g, "\\'")}')"
+                title="Remove document and its Redis vectors"
+                class="px-2.5 py-1 rounded bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/70 font-mono text-[11px] shrink-0 transition">
+                Delete
+              </button>
+            </div>
+          `).join("");
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function refreshTelemetry() {
+      try {
+        const res = await fetch("/api/telemetry");
+        const s = await res.json();
+        if (s.error) return;
+
+        document.getElementById("kpiSavedPct").textContent = `${s.cost_savings_pct}%`;
+        document.getElementById("kpiSavedUsd").textContent = `$${Number(s.total_saved_cost_usd).toFixed(6)} saved`;
+        document.getElementById("kpiHitRate").textContent = `${s.cache_hit_rate_pct}%`;
+        document.getElementById("kpiRequests").textContent = `${s.total_requests} requests`;
+        document.getElementById("kpiLatency").textContent = `${s.avg_latency_ms} ms`;
+        document.getElementById("kpiSafety").textContent = `${s.pii_redactions} / ${s.failovers}`;
+
+        const tbody = document.getElementById("recentLogsBody");
+        if (!s.recent_requests || !s.recent_requests.length) {
+          tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-zinc-500">No requests logged yet.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = s.recent_requests.slice(0, 6).map(r => {
+          const flags = [
+            r.pii_redacted ? `PII:${r.pii_redacted}` : "",
+            r.failover_used ? "503_RETRY" : ""
+          ].filter(Boolean).join(" ") || "-";
+
+          const cacheColor = r.cache_status.includes("HIT") ? "text-emerald-400" : "text-zinc-400";
+          return `
+            <tr>
+              <td class="py-1.5 ${cacheColor}">${escapeHtml(r.cache_status)}</td>
+              <td class="py-1.5 text-zinc-200">${escapeHtml(r.model)}</td>
+              <td class="py-1.5 text-amber-400">${escapeHtml(flags)}</td>
+              <td class="py-1.5 text-right">${r.latency_ms}ms</td>
+              <td class="py-1.5 text-right text-emerald-400">$${Number(r.saved_cost_usd).toFixed(5)}</td>
+            </tr>
+          `;
+        }).join("");
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Boot
+    const savedAdminKey = sessionStorage.getItem("gw_admin_key");
+    if (savedAdminKey) {
+      document.getElementById("adminKeyInput").value = savedAdminKey;
+    }
+    previewGraphMode("all");
+    loadDocuments();
+    refreshTelemetry();
+  </script>
+</body>
+</html>
