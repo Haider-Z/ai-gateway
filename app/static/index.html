@@ -41,6 +41,37 @@
     .node-group:hover polygon.node-box {
       filter: brightness(1.15);
     }
+
+  /* Midnight Indigo & Cyan Theme Override */
+:root {
+  --bg: #0b1120 !important;
+  --bg-card: #111827 !important;
+  --surface: #111827 !important;
+  --border: #1e293b !important;
+  --accent: #38bdf8 !important;
+  --green: #38bdf8 !important;
+  --emerald: #38bdf8 !important;
+}
+
+body {
+  background: radial-gradient(circle at top right, #172554 0%, #0b1120 45%, #070b14 100%) !important;
+  color: #e2e8f0 !important;
+}
+
+header, nav, .card, .panel, [class*="card"], [class*="panel"] {
+  background-color: rgba(17, 24, 39, 0.85) !important;
+  border-color: #1e293b !important;
+}
+
+button.primary, button[type="submit"], #send-btn, #warm-btn {
+  background-color: #0284c7 !important;
+  color: #f8fafc !important;
+  border-color: #38bdf8 !important;
+}
+
+button.primary:hover, button[type="submit"]:hover, #send-btn:hover, #warm-btn:hover {
+  background-color: #0369a1 !important;
+}
   </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden font-sans antialiased selection:bg-emerald-500/20 selection:text-emerald-200">
