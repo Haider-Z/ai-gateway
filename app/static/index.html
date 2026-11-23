@@ -42,35 +42,46 @@
       filter: brightness(1.15);
     }
 
-  /* Midnight Indigo & Cyan Theme Override */
-:root {
-  --bg: #0b1120 !important;
-  --bg-card: #111827 !important;
-  --surface: #111827 !important;
-  --border: #1e293b !important;
-  --accent: #38bdf8 !important;
-  --green: #38bdf8 !important;
-  --emerald: #38bdf8 !important;
+  
+  /* Light Blue & White Theme Override */
+  :root {
+  --bg: #f0f7ff !important;
+  --bg-card: #ffffff !important;
+  --surface: #ffffff !important;
+  --border: #bfdbfe !important;
+  --text: #0f172a !important;
+  --muted: #475569 !important;
+  --accent: #2563eb !important;
+  --green: #0284c7 !important;
+  --emerald: #0284c7 !important;
 }
 
 body {
-  background: radial-gradient(circle at top right, #172554 0%, #0b1120 45%, #070b14 100%) !important;
-  color: #e2e8f0 !important;
+  background: linear-gradient(180deg, #e0f2fe 0%, #f8fafc 45%, #ffffff 100%) !important;
+  color: #0f172a !important;
 }
 
 header, nav, .card, .panel, [class*="card"], [class*="panel"] {
-  background-color: rgba(17, 24, 39, 0.85) !important;
-  border-color: #1e293b !important;
+  background-color: #ffffff !important;
+  border-color: #bfdbfe !important;
+  color: #0f172a !important;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.06) !important;
+}
+
+input, textarea, select {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+  border-color: #93c5fd !important;
 }
 
 button.primary, button[type="submit"], #send-btn, #warm-btn {
-  background-color: #0284c7 !important;
-  color: #f8fafc !important;
-  border-color: #38bdf8 !important;
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #1d4ed8 !important;
 }
 
 button.primary:hover, button[type="submit"]:hover, #send-btn:hover, #warm-btn:hover {
-  background-color: #0369a1 !important;
+  background-color: #1d4ed8 !important;
 }
   </style>
 </head>
